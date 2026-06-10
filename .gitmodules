@@ -1,0 +1,3 @@
+[submodule "stable/controller"]
+	path = stable/controller
+	url = https://github.com/efJerryYang/ibg-controller.git

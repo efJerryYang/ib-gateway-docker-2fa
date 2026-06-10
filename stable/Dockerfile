@@ -27,7 +27,7 @@ WORKDIR /tmp/setup
 # Prepare system
 RUN apt-get update -y && \
   apt-get install --no-install-recommends --yes \
-  curl ca-certificates unzip && \
+  curl ca-certificates unzip default-jdk-headless make && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   if [ "$(uname -m)" = "aarch64" ]; then \
@@ -59,6 +59,12 @@ COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
 
 # Copy scripts
 COPY ./scripts /root/scripts
+COPY ./controller /root/controller
+RUN cd /root/controller && \
+  make install DESTDIR=/root && \
+  install -m 0755 scripts/healthcheck.sh /root/scripts/healthcheck.sh && \
+  cd / && \
+  rm -rf /root/controller /root/build
 
 ##############################################################################
 # Build Stage: build production image
@@ -81,6 +87,8 @@ ENV IBC_INI=${HOME}/ibc/config.ini
 ENV IBC_INI_TMPL=${IBC_INI}.tmpl
 ENV SCRIPT_PATH=${HOME}/scripts
 ENV GATEWAY_OR_TWS=gateway
+ENV CONTROLLER_HEALTH_SERVER_PORT=8080
+ENV CONTROLLER_HEALTH_SERVER_HOST=0.0.0.0
 ARG DEBIAN_FRONTEND=noninteractive
 # Copy files
 COPY --from=setup /usr/local/ /usr/local/
@@ -90,7 +98,8 @@ COPY --chown=${USER_ID}:${USER_GID} --from=setup /root/ ${HOME}
 RUN apt-get update -y && \
   apt-get upgrade -y && \
   apt-get install --no-install-recommends --yes \
-  gettext-base socat xvfb x11vnc sshpass openssh-client sudo telnet && \
+  gettext-base socat xvfb x11vnc sshpass openssh-client sudo telnet \
+  python3 matchbox-window-manager curl && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   if id ubuntu; then \
@@ -104,6 +113,9 @@ RUN apt-get update -y && \
 
 USER ${USER_ID}:${USER_GID}
 WORKDIR ${HOME}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+  CMD /home/ibgateway/scripts/healthcheck.sh
 
 # Start run script
 CMD ["/home/ibgateway/scripts/run.sh"]
